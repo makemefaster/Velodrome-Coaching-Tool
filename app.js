@@ -1,6 +1,13 @@
 import { OVAL_WIDTH, OVAL_HEIGHT, LANES, trackToCanvas, canvasToTrack, renderTrack } from "./track.js";
 import { DRILL_PRESETS } from "./presets.js";
-import { createDrillState, triggerWhistle, stepSimulation, getHudTelemetry } from "./engine.js";
+import {
+  createDrillState,
+  commandDropToBlack,
+  commandPeelToBlue,
+  triggerWhistle,
+  stepSimulation,
+  getHudTelemetry
+} from "./engine.js";
 
 const canvas = document.getElementById("track-canvas");
 const ctx = canvas.getContext("2d");
@@ -11,7 +18,7 @@ const state = {
   viewMode: "oval",
   tool: "move",
   playing: false,
-  drill: createDrillState(DRILL_PRESETS["six-pairs-whistle"]),
+  drill: createDrillState(DRILL_PRESETS["trains-and-stations"]),
   drawings: [],
   selectedRider: null,
   draggingRider: null,
@@ -37,7 +44,7 @@ function loadPreset(key) {
 presetSelect.addEventListener("change", (e) => loadPreset(e.target.value));
 document.getElementById("btn-reset").addEventListener("click", () => loadPreset(presetSelect.value));
 
-// Screen Tab Switching
+// Tab Switching
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
@@ -50,7 +57,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
   });
 });
 
-// Play / Pause & Whistle Controls
+// Play / Pause & Whistle
 const btnPlay = document.getElementById("btn-play");
 function togglePlay() {
   state.playing = !state.playing;
@@ -61,6 +68,18 @@ btnPlay.addEventListener("click", togglePlay);
 document.getElementById("btn-whistle").addEventListener("click", () => {
   if (!state.playing) togglePlay();
   triggerWhistle(state.drill);
+});
+
+// Drop to Black & Peel to Blue Controls
+const transferCountEl = document.getElementById("transfer-count");
+document.getElementById("btn-drop-black").addEventListener("click", () => {
+  if (!state.playing) togglePlay();
+  commandDropToBlack(state.drill, Number(transferCountEl.value));
+});
+
+document.getElementById("btn-peel-blue").addEventListener("click", () => {
+  if (!state.playing) togglePlay();
+  commandPeelToBlue(state.drill, Number(transferCountEl.value));
 });
 
 window.addEventListener("keydown", (e) => {
@@ -87,7 +106,7 @@ document.getElementById("btn-clear-drawings").addEventListener("click", () => {
   state.drawings = [];
 });
 
-// View Mode Toggle (Full Oval vs. Straightaway Close-Up)
+// View Toggle
 const btnViewMode = document.getElementById("btn-view-mode");
 btnViewMode.addEventListener("click", () => {
   state.viewMode = state.viewMode === "oval" ? "closeup" : "oval";
@@ -137,6 +156,7 @@ canvas.addEventListener("pointermove", (e) => {
     const trackCoords = canvasToTrack(pt.x, pt.y, state.viewMode);
     state.draggingRider.s = trackCoords.s;
     state.draggingRider.laneOffset = trackCoords.laneOffset;
+    state.draggingRider.targetLane = trackCoords.laneOffset;
   } else if (state.activeDrawing) {
     state.activeDrawing.x2 = pt.x;
     state.activeDrawing.y2 = pt.y;
@@ -147,6 +167,38 @@ window.addEventListener("pointerup", () => {
   state.draggingRider = null;
   state.activeDrawing = null;
 });
+
+// Pre-Programmed Sequence List & Studio Sync
+function renderSequenceList() {
+  const listEl = document.getElementById("sequence-list");
+  listEl.innerHTML = "";
+  const seq = state.drill.sequence || [];
+  if (seq.length === 0) {
+    listEl.innerHTML = `<li style="color:#94a3b8;font-weight:400">No programmed moves yet. Add a timed step above.</li>`;
+    return;
+  }
+
+  seq.sort((a, b) => a.time - b.time);
+  seq.forEach((step, idx) => {
+    const li = document.createElement("li");
+    if (step.fired) li.classList.add("fired");
+    const labelMap = {
+      "drop-black": `⬇ Drop ${step.count} rider${step.count > 1 ? "s" : ""} to Black`,
+      "peel-blue": `⬆ Peel ${step.count} rider${step.count > 1 ? "s" : ""} to Blue`,
+      "whistle": `📣 Blow Whistle`
+    };
+    li.innerHTML = `<span><strong>${step.time.toFixed(1)}s</strong> — ${labelMap[step.action] || step.action}</span>`;
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "✕";
+    delBtn.title = "Remove step";
+    delBtn.addEventListener("click", () => {
+      state.drill.sequence.splice(idx, 1);
+      syncStudioInputs();
+    });
+    li.appendChild(delBtn);
+    listEl.appendChild(li);
+  });
+}
 
 function syncStudioInputs() {
   const s = state.drill.speeds;
@@ -159,6 +211,7 @@ function syncStudioInputs() {
   document.getElementById("input-station-speed").value = s.station;
   document.getElementById("val-station-speed").textContent = s.station;
   document.getElementById("chk-auto-bank").checked = state.drill.autoBank;
+  renderSequenceList();
   document.getElementById("json-editor").value = JSON.stringify(state.drill, null, 2);
 }
 
@@ -177,9 +230,23 @@ document.getElementById("chk-auto-bank").addEventListener("change", (e) => {
   state.drill.autoBank = e.target.checked;
 });
 
+document.getElementById("btn-add-step").addEventListener("click", () => {
+  const time = Math.max(0, Number(document.getElementById("seq-time").value) || 0);
+  const action = document.getElementById("seq-action").value;
+  const count = Number(document.getElementById("seq-count").value) || 1;
+  state.drill.sequence.push({ time, action, count, fired: false });
+  syncStudioInputs();
+});
+
+document.getElementById("btn-clear-seq").addEventListener("click", () => {
+  state.drill.sequence = [];
+  syncStudioInputs();
+});
+
 document.getElementById("btn-add-rider").addEventListener("click", () => {
   state.drill.riders.push({
     id: `custom-${Date.now()}`,
+    role: "train",
     s: 0.25,
     laneOffset: LANES.BLACK,
     speedKmh: state.drill.speeds.pack,
@@ -205,7 +272,8 @@ document.getElementById("btn-apply-json").addEventListener("click", () => {
   try {
     const parsed = JSON.parse(document.getElementById("json-editor").value);
     state.drill = parsed;
-    status.textContent = "✓ Drill updated and loaded onto Track Display Board.";
+    renderSequenceList();
+    status.textContent = "✓ Drill & sequence applied to Track Display Board.";
     status.style.color = "#10b981";
   } catch (err) {
     status.textContent = `✗ Invalid JSON: ${err.message}`;
@@ -232,6 +300,7 @@ document.getElementById("file-import-json").addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 
+// GIF Export (Captures 5 seconds of your programmed sequence & live track motion)
 document.getElementById("btn-export-gif").addEventListener("click", async () => {
   const btn = document.getElementById("btn-export-gif");
   if (typeof GIF === "undefined") {
@@ -239,7 +308,7 @@ document.getElementById("btn-export-gif").addEventListener("click", async () => 
     return;
   }
 
-  btn.textContent = "⏳ Recording GIF...";
+  btn.textContent = "⏳ Recording...";
   btn.disabled = true;
 
   const workerRes = await fetch("https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js");
@@ -262,7 +331,7 @@ document.getElementById("btn-export-gif").addEventListener("click", async () => 
   const wasPlaying = state.playing;
   state.playing = false;
 
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 50; i++) {
     stepSimulation(state.drill, 0.1, null);
     renderTrack(ctx, state);
     offCtx.drawImage(canvas, 0, 0, 700, 400);
@@ -274,7 +343,7 @@ document.getElementById("btn-export-gif").addEventListener("click", async () => 
     a.href = URL.createObjectURL(blob);
     a.download = `${state.drill.id || "velodrome-session"}.gif`;
     a.click();
-    btn.textContent = "🎬 Export GIF";
+    btn.textContent = "🎬 GIF";
     btn.disabled = false;
     state.playing = wasPlaying;
   });
