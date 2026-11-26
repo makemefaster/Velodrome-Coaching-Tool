@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Velodrome Coaching Board</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Lightweight client-side GIF encoder -->
+  <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="badge">250M</span>
+      <h1>Velodrome Coaching Board</h1>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="board-view">1. Track Display Board</button>
+      <button class="tab-btn" data-tab="studio-view">2. Drill & Rules Studio</button>
+    </nav>
+
+    <div class="header-actions">
+      <select id="preset-select" title="Load Coaching Drill"></select>
+      <button id="btn-reset" class="btn secondary">Reset</button>
+    </div>
+  </header>
+
+  <!-- SCREEN 1: DISTRACTION-FREE TRACK DISPLAY BOARD -->
+  <main id="board-view" class="screen active">
+    <div class="canvas-stage" id="canvas-stage">
+      <canvas id="track-canvas"></canvas>
+
+      <!-- Compact Top-Right Status Pill -->
+      <div class="hud-pill" id="telemetry-hud">
+        <span id="hud-drill-name">6 Pairs Whistle Build & Sprint</span>
+        <span class="divider">•</span>
+        <span id="hud-phase">Phase: Steady Pack</span>
+        <span class="divider">•</span>
+        <span id="hud-gap">Gap: 0.0m</span>
+      </div>
+    </div>
+
+    <!-- Bottom Floating Control Dock -->
+    <div class="control-dock">
+      <div class="dock-group">
+        <button id="btn-play" class="btn primary">▶ Play</button>
+        <button id="btn-whistle" class="btn accent" title="Shortcut: W">📣 Blow Whistle (W)</button>
+      </div>
+
+      <div class="dock-group">
+        <button class="tool-btn active" data-tool="move">✋ Move</button>
+        <button class="tool-btn" data-tool="swing-up">⤴ Swing ▲</button>
+        <button class="tool-btn" data-tool="swing-down">⤵ Swing ▼</button>
+        <button class="tool-btn" data-tool="arrow">↗ Arrow</button>
+        <button id="btn-clear-drawings" class="btn ghost">Clear Lines</button>
+      </div>
+
+      <div class="dock-group">
+        <button id="btn-view-mode" class="btn secondary">View: Full Oval</button>
+        <button id="btn-export-gif" class="btn success">🎬 Export GIF</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- SCREEN 2: DRILL SETUP & RULES STUDIO -->
+  <main id="studio-view" class="screen">
+    <div class="studio-grid">
+      <section class="card">
+        <h2>Live Pace & Rule Tuning</h2>
+        <p class="muted">Adjust speeds in real time and switch back to the Track Display Board to observe spacing and catches.</p>
+
+        <div class="form-row">
+          <label>Main Pack / Train Speed (Black Line): <strong id="val-pack-speed">38</strong> km/h</label>
+          <input type="range" id="input-pack-speed" min="25" max="55" value="38" />
+        </div>
+
+        <div class="form-row">
+          <label>High Build / Attack Speed (Above Blue): <strong id="val-build-speed">43</strong> km/h</label>
+          <input type="range" id="input-build-speed" min="25" max="60" value="43" />
+        </div>
+
+        <div class="form-row">
+          <label>Full Sprint Speed: <strong id="val-sprint-speed">54</strong> km/h</label>
+          <input type="range" id="input-sprint-speed" min="40" max="68" value="54" />
+        </div>
+
+        <div class="form-row">
+          <label>Station Holding Speed (High Banking): <strong id="val-station-speed">12</strong> km/h</label>
+          <input type="range" id="input-station-speed" min="0" max="30" value="12" />
+        </div>
+
+        <div class="form-row checkbox-row">
+          <input type="checkbox" id="chk-auto-bank" checked />
+          <label for="chk-auto-bank">Natural Banking Physics (slow down higher up the banking when dragging manually)</label>
+        </div>
+
+        <hr />
+        <h3>Add Track Elements</h3>
+        <div class="button-row">
+          <button id="btn-add-rider" class="btn secondary">+ Add Rider</button>
+          <button id="btn-add-derny" class="btn secondary">+ Add Derny</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Drill JSON Definition (Share & Edit)</h2>
+        <p class="muted">Edit rider positions, colors, and autonomous rule triggers directly, or paste a JSON drill shared by another coach.</p>
+        <textarea id="json-editor" spellcheck="false"></textarea>
+        <div class="button-row">
+          <button id="btn-apply-json" class="btn primary">Apply Drill to Board</button>
+          <button id="btn-download-json" class="btn secondary">Download .JSON</button>
+          <label class="btn secondary file-label">
+            Load .JSON
+            <input type="file" id="file-import-json" accept=".json" hidden />
+          </label>
+        </div>
+        <p id="json-status" class="status-msg"></p>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
