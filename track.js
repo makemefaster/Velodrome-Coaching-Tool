@@ -1,33 +1,25 @@
-// Logical coordinate constants (250m Olympic Velodrome geometry)
 export const OVAL_WIDTH = 1400;
 export const OVAL_HEIGHT = 800;
-export const STRAIGHT_LEN = 540; // Total straightaway length in px
-export const INNER_RADIUS = 175; // Pole line turn radius
-export const TRACK_WIDTH = 165;  // Banking width from pole line to fence
+export const STRAIGHT_LEN = 540;
+export const INNER_RADIUS = 178;
+export const TRACK_WIDTH = 165;
 
-// Lane offsets from the black datum line (in pixels up the banking)
-// Datum (black) = 0, Sprinter (red) = 16, Stayer (blue) = 56, Fence = 155
 export const LANES = {
-  APRON: -16,
+  APRON: -10,
   BLACK: 0,
-  RED: 16,
-  BLUE: 56,
-  MID_HIGH: 95,
-  HIGH: 130
+  RED: 17,
+  BLUE: 58,
+  MID_HIGH: 96,
+  HIGH: 132
 };
 
-/**
- * Converts normalized track progress `s` (0..1 around 250m oval, counter-clockwise)
- * and lateral banking height `laneOffset` (px above black datum line) into (x, y, heading).
- */
 export function trackToCanvas(s, laneOffset, viewMode = "oval") {
   s = ((s % 1) + 1) % 1;
 
   if (viewMode === "closeup") {
-    // Home straightaway close-up (moving right-to-left along bottom straight)
     const x = OVAL_WIDTH - s * OVAL_WIDTH;
-    const baseDatumY = 580;
-    const scaleY = 2.4;
+    const baseDatumY = 620;
+    const scaleY = 2.6;
     const y = baseDatumY - laneOffset * scaleY;
     return { x, y, angle: Math.PI };
   }
@@ -42,45 +34,38 @@ export function trackToCanvas(s, laneOffset, viewMode = "oval") {
   const totalDist = 2 * straightDist + 2 * turnDist;
   let d = s * totalDist;
 
-  // 1. Home Straight (bottom, left-to-right counter-clockwise)
   if (d < straightDist) {
-    const x = cx - halfStraight + d;
-    const y = cy + r;
-    return { x, y, angle: 0 };
+    return { x: cx - halfStraight + d, y: cy + r, angle: 0 };
   }
   d -= straightDist;
 
-  // 2. Right Turn (Turns 1 & 2, bottom to top counter-clockwise)
   if (d < turnDist) {
     const theta = Math.PI / 2 - (d / turnDist) * Math.PI;
-    const x = cx + halfStraight + Math.cos(theta) * r;
-    const y = cy + Math.sin(theta) * r;
-    return { x, y, angle: theta - Math.PI / 2 };
+    return {
+      x: cx + halfStraight + Math.cos(theta) * r,
+      y: cy + Math.sin(theta) * r,
+      angle: theta - Math.PI / 2
+    };
   }
   d -= turnDist;
 
-  // 3. Back Straight (top, right-to-left counter-clockwise)
   if (d < straightDist) {
-    const x = cx + halfStraight - d;
-    const y = cy - r;
-    return { x, y, angle: Math.PI };
+    return { x: cx + halfStraight - d, y: cy - r, angle: Math.PI };
   }
   d -= straightDist;
 
-  // 4. Left Turn (Turns 3 & 4, top to bottom counter-clockwise)
   const theta = -Math.PI / 2 - (d / turnDist) * Math.PI;
-  const x = cx - halfStraight + Math.cos(theta) * r;
-  const y = cy + Math.sin(theta) * r;
-  return { x, y, angle: theta - Math.PI / 2 };
+  return {
+    x: cx - halfStraight + Math.cos(theta) * r,
+    y: cy + Math.sin(theta) * r,
+    angle: theta - Math.PI / 2
+  };
 }
 
-/**
- * Converts a canvas click/drag point (x, y) back to nearest (s, laneOffset).
- */
 export function canvasToTrack(x, y, viewMode = "oval") {
   if (viewMode === "closeup") {
     const s = Math.max(0, Math.min(1, (OVAL_WIDTH - x) / OVAL_WIDTH));
-    const laneOffset = Math.max(-22, Math.min(155, (580 - y) / 2.4));
+    const laneOffset = Math.max(-14, Math.min(155, (620 - y) / 2.6));
     return { s, laneOffset };
   }
 
@@ -88,11 +73,9 @@ export function canvasToTrack(x, y, viewMode = "oval") {
   const cy = OVAL_HEIGHT / 2;
   const halfStraight = STRAIGHT_LEN / 2;
 
-  let clampedX = Math.max(cx - halfStraight, Math.min(cx + halfStraight, x));
-  const dx = x - clampedX;
-  const dy = y - cy;
-  const distFromSpine = Math.hypot(dx, dy);
-  const laneOffset = Math.max(-22, Math.min(155, distFromSpine - INNER_RADIUS));
+  const clampedX = Math.max(cx - halfStraight, Math.min(cx + halfStraight, x));
+  const distFromSpine = Math.hypot(x - clampedX, y - cy);
+  const laneOffset = Math.max(-14, Math.min(155, distFromSpine - INNER_RADIUS));
 
   const r = INNER_RADIUS + laneOffset;
   const straightDist = STRAIGHT_LEN;
@@ -118,9 +101,6 @@ export function canvasToTrack(x, y, viewMode = "oval") {
   return { s: ((d / totalDist) % 1 + 1) % 1, laneOffset };
 }
 
-/**
- * Renders the velodrome surface, official UCI lines, riders, derny, and drawings.
- */
 export function renderTrack(ctx, state) {
   ctx.clearRect(0, 0, OVAL_WIDTH, OVAL_HEIGHT);
 
@@ -162,13 +142,13 @@ function drawOvalSurface(ctx) {
 
   // Siberian pine wooden boards
   traceStadium(INNER_RADIUS + TRACK_WIDTH);
-  ctx.fillStyle = "#e3c397";
+  ctx.fillStyle = "#e5c69b";
   ctx.fill();
 
-  // Subtle wood board grain lines
-  ctx.strokeStyle = "rgba(160, 115, 65, 0.25)";
+  // Wood board grain lines
+  ctx.strokeStyle = "rgba(160, 115, 65, 0.24)";
   ctx.lineWidth = 1;
-  for (let offset = 10; offset < TRACK_WIDTH; offset += 14) {
+  for (let offset = 12; offset < TRACK_WIDTH; offset += 15) {
     traceStadium(INNER_RADIUS + offset);
     ctx.stroke();
   }
@@ -185,49 +165,53 @@ function drawOvalSurface(ctx) {
   ctx.lineWidth = 3.5;
   ctx.stroke();
 
-  // Black Measurement / Datum Line
-  traceStadium(INNER_RADIUS + LANES.BLACK);
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 4;
-  ctx.stroke();
-
-  // Côte d'Azur Blue Apron
-  traceStadium(INNER_RADIUS - 3);
-  ctx.lineWidth = 26;
+  // Slim Côte d'Azur Blue Apron (narrowed so it doesn't crowd the datum line)
+  traceStadium(INNER_RADIUS - 8);
+  ctx.lineWidth = 13;
   ctx.strokeStyle = "#38bdf8";
   ctx.stroke();
 
+  // Crisp White Contrast Margin inside the Black Datum Line
+  traceStadium(INNER_RADIUS - 2.5);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Bold, Clear Black Measurement / Datum Line
+  traceStadium(INNER_RADIUS + LANES.BLACK);
+  ctx.strokeStyle = "#090d16";
+  ctx.lineWidth = 4.5;
+  ctx.stroke();
+
   // Green Infield
-  traceStadium(INNER_RADIUS - 28);
+  traceStadium(INNER_RADIUS - 14.5);
   ctx.fillStyle = "#14532d";
   ctx.fill();
 
-  // Finish Line & Pursuit Lines
+  // Finish Line
   const finishX = cx + 60;
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.moveTo(finishX, cy + INNER_RADIUS - 2);
+  ctx.moveTo(finishX, cy + INNER_RADIUS - 1);
   ctx.lineTo(finishX, cy + INNER_RADIUS + TRACK_WIDTH);
   ctx.stroke();
 
   ctx.strokeStyle = "#ef4444";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(finishX, cy + INNER_RADIUS - 2);
+  ctx.moveTo(finishX, cy + INNER_RADIUS - 1);
   ctx.lineTo(finishX, cy + INNER_RADIUS + TRACK_WIDTH);
   ctx.stroke();
 }
 
 function drawCloseupSurface(ctx) {
-  // Warm Siberian pine background
-  ctx.fillStyle = "#e3c397";
+  ctx.fillStyle = "#e5c69b";
   ctx.fillRect(0, 0, OVAL_WIDTH, OVAL_HEIGHT);
 
-  // Horizontal wood planks
   ctx.strokeStyle = "rgba(160, 115, 65, 0.28)";
   ctx.lineWidth = 1.5;
-  for (let y = 20; y < 630; y += 22) {
+  for (let y = 20; y < 620; y += 22) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(OVAL_WIDTH, y);
@@ -235,7 +219,7 @@ function drawCloseupSurface(ctx) {
   }
 
   // Blue Stayer's Line
-  const blueY = 580 - LANES.BLUE * 2.4;
+  const blueY = 620 - LANES.BLUE * 2.6;
   ctx.strokeStyle = "#1d4ed8";
   ctx.lineWidth = 6;
   ctx.beginPath();
@@ -244,7 +228,7 @@ function drawCloseupSurface(ctx) {
   ctx.stroke();
 
   // Red Sprinter's Line
-  const redY = 580 - LANES.RED * 2.4;
+  const redY = 620 - LANES.RED * 2.6;
   ctx.strokeStyle = "#dc2626";
   ctx.lineWidth = 6;
   ctx.beginPath();
@@ -252,22 +236,25 @@ function drawCloseupSurface(ctx) {
   ctx.lineTo(OVAL_WIDTH, redY);
   ctx.stroke();
 
-  // Black Datum Line
-  const blackY = 580;
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 7;
+  // Crisp White Contrast Strip + Bold Black Datum Line
+  const blackY = 620;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, blackY + 3, OVAL_WIDTH, 4);
+
+  ctx.strokeStyle = "#090d16";
+  ctx.lineWidth = 8;
   ctx.beginPath();
   ctx.moveTo(0, blackY);
   ctx.lineTo(OVAL_WIDTH, blackY);
   ctx.stroke();
 
-  // Côte d'Azur Blue Apron
+  // Slim Côte d'Azur Blue Apron (narrower strip below white edge)
   ctx.fillStyle = "#38bdf8";
-  ctx.fillRect(0, blackY + 4, OVAL_WIDTH, 70);
+  ctx.fillRect(0, blackY + 7, OVAL_WIDTH, 32);
 
-  // Infield edge
+  // Green Infield
   ctx.fillStyle = "#14532d";
-  ctx.fillRect(0, blackY + 74, OVAL_WIDTH, OVAL_HEIGHT - (blackY + 74));
+  ctx.fillRect(0, blackY + 39, OVAL_WIDTH, OVAL_HEIGHT - (blackY + 39));
 }
 
 function drawRider(ctx, x, y, angle, rider, isSelected) {
@@ -275,7 +262,6 @@ function drawRider(ctx, x, y, angle, rider, isSelected) {
   ctx.translate(x, y);
   ctx.rotate(angle);
 
-  // Selection halo
   if (isSelected) {
     ctx.beginPath();
     ctx.arc(0, 0, 22, 0, Math.PI * 2);
@@ -284,7 +270,6 @@ function drawRider(ctx, x, y, angle, rider, isSelected) {
     ctx.stroke();
   }
 
-  // Wheels & Frame
   ctx.strokeStyle = "#1e293b";
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -292,13 +277,11 @@ function drawRider(ctx, x, y, angle, rider, isSelected) {
   ctx.lineTo(16, 0);
   ctx.stroke();
 
-  // Drop handlebars
   ctx.beginPath();
   ctx.moveTo(10, -8);
   ctx.lineTo(10, 8);
   ctx.stroke();
 
-  // Rider Torso / Jersey
   ctx.fillStyle = rider.jersey || "#0284c7";
   ctx.beginPath();
   ctx.ellipse(-2, 0, 10, 7, 0, 0, Math.PI * 2);
@@ -307,7 +290,6 @@ function drawRider(ctx, x, y, angle, rider, isSelected) {
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Helmet
   ctx.fillStyle = rider.helmet || "#ef4444";
   ctx.beginPath();
   ctx.arc(7, 0, 5.5, 0, Math.PI * 2);
@@ -316,9 +298,8 @@ function drawRider(ctx, x, y, angle, rider, isSelected) {
 
   ctx.restore();
 
-  // Optional label / speed tag
   if (rider.label) {
-    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
     ctx.font = "bold 10px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(rider.label, x, y - 16);
@@ -338,7 +319,6 @@ function drawDerny(ctx, x, y, angle, isSelected) {
     ctx.stroke();
   }
 
-  // Motorbike body
   ctx.fillStyle = "#991b1b";
   ctx.beginPath();
   ctx.roundRect(-20, -7, 40, 14, 5);
@@ -347,7 +327,6 @@ function drawDerny(ctx, x, y, angle, isSelected) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Pacer shoulders & helmet
   ctx.fillStyle = "#475569";
   ctx.beginPath();
   ctx.ellipse(2, 0, 9, 9, 0, 0, Math.PI * 2);
@@ -378,7 +357,6 @@ function drawAnnotations(ctx, drawings) {
       const dx = d.x2 - d.x1;
       const dy = d.y2 - d.y1;
       const len = Math.hypot(dx, dy) || 1;
-      // Normal vector pointing away from track center (up the banking)
       const cx = OVAL_WIDTH / 2;
       const cy = OVAL_HEIGHT / 2;
       let nx = -dy / len;
@@ -400,7 +378,6 @@ function drawAnnotations(ctx, drawings) {
     }
     ctx.stroke();
 
-    // Arrowhead
     const headLen = 13;
     ctx.beginPath();
     ctx.moveTo(d.x2, d.y2);
