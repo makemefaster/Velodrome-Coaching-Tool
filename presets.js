@@ -1,168 +1,113 @@
 import { LANES } from "./track.js";
 
-const HELMET_COLORS = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#ec4899"];
+const JERSEYS = ["#0284c7", "#e11d48", "#16a34a", "#d97706", "#7c3aed", "#0d9488"];
+const HELMETS = ["#ef4444", "#f8fafc", "#facc15", "#3b82f6", "#10b981", "#f97316"];
 
 export const DRILL_PRESETS = {
   "trains-and-stations": {
     id: "trains-and-stations",
-    name: "🚉 Trains & Stations (Drop & Peel)",
-    ruleMode: "banking-pace",
-    speeds: { pack: 44, build: 46, sprint: 54, station: 28 },
-    sequence: [
-      { time: 2.0, action: "drop-black", count: 2 },
-      { time: 6.0, action: "peel-blue", count: 1 }
-    ],
-    riders: buildTrainsAndStations()
+    name: "🚉 Trains & Stations (6 Train + 2 Stations)",
+    zoneSpeeds: { low: 45, mid: 34, high: 24 },
+    riders: [
+      // 6-rider train on the black datum line
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: `train-${i}`,
+        s: 0.24 - i * 0.024,
+        laneOffset: LANES.BLACK,
+        jersey: "#0284c7",
+        helmet: HELMETS[i % HELMETS.length],
+        useZoneSpeed: true,
+        speedKmh: 45
+      })),
+      // Station 1 (3 riders above blue line)
+      ...Array.from({ length: 3 }, (_, i) => ({
+        id: `st1-${i}`,
+        s: 0.34 - i * 0.024,
+        laneOffset: LANES.BLUE + 26,
+        jersey: "#d97706",
+        helmet: "#f8fafc",
+        useZoneSpeed: true,
+        speedKmh: 24
+      })),
+      // Station 2 (3 riders above blue line)
+      ...Array.from({ length: 3 }, (_, i) => ({
+        id: `st2-${i}`,
+        s: 0.78 - i * 0.024,
+        laneOffset: LANES.BLUE + 26,
+        jersey: "#16a34a",
+        helmet: "#f8fafc",
+        useZoneSpeed: true,
+        speedKmh: 24
+      }))
+    ]
   },
-  "six-pairs-whistle": {
-    id: "six-pairs-whistle",
-    name: "⚡ 6 Pairs Whistle Build & Sprint",
-    ruleMode: "six-pairs-whistle",
-    speeds: { pack: 38, build: 43, sprint: 54, station: 26 },
-    sequence: [
-      { time: 1.5, action: "whistle", count: 2 }
-    ],
-    riders: buildSixPairs()
+  "six-pairs": {
+    id: "six-pairs",
+    name: "⚡ 6 Pairs on Black/Red Lines",
+    zoneSpeeds: { low: 40, mid: 34, high: 26 },
+    riders: Array.from({ length: 6 }, (_, p) => {
+      const s = 0.25 - p * 0.026;
+      const jersey = JERSEYS[p % JERSEYS.length];
+      return [
+        { id: `p${p}-in`, s, laneOffset: LANES.BLACK, jersey, helmet: "#f8fafc", useZoneSpeed: true, speedKmh: 40 },
+        { id: `p${p}-out`, s, laneOffset: LANES.RED, jersey, helmet: "#facc15", useZoneSpeed: true, speedKmh: 40 }
+      ];
+    }).flat()
   },
   "seans-game": {
     id: "seans-game",
     name: "🎯 Sean's Game (5 Train + 8 High)",
-    ruleMode: "banking-pace",
-    speeds: { pack: 43, build: 45, sprint: 52, station: 28 },
-    sequence: [
-      { time: 2.5, action: "drop-black", count: 2 },
-      { time: 7.0, action: "peel-blue", count: 2 }
-    ],
-    riders: buildSeansGame()
+    zoneSpeeds: { low: 44, mid: 34, high: 25 },
+    riders: [
+      ...Array.from({ length: 5 }, (_, i) => ({
+        id: `st-${i}`,
+        s: 0.22 - i * 0.024,
+        laneOffset: LANES.BLACK,
+        jersey: "#0284c7",
+        helmet: HELMETS[i % HELMETS.length],
+        useZoneSpeed: true,
+        speedKmh: 44
+      })),
+      ...[0.06, 0.18, 0.31, 0.44, 0.57, 0.69, 0.81, 0.92].map((s, i) => ({
+        id: `sh-${i}`,
+        s,
+        laneOffset: LANES.BLUE + 22 + (i % 3) * 20,
+        jersey: "#e11d48",
+        helmet: "#f8fafc",
+        useZoneSpeed: true,
+        speedKmh: 25
+      }))
+    ]
   },
   "find-a-friend": {
     id: "find-a-friend",
     name: "🫂 Find a Friend (10 Above Blue)",
-    ruleMode: "banking-pace",
-    speeds: { pack: 42, build: 44, sprint: 50, station: 30 },
-    sequence: [],
-    riders: buildFindAFriend()
+    zoneSpeeds: { low: 44, mid: 34, high: 26 },
+    riders: Array.from({ length: 10 }, (_, i) => ({
+      id: `faf-${i}`,
+      s: (i * 0.095 + 0.04) % 1,
+      laneOffset: LANES.BLUE + 20 + (i % 3) * 24,
+      jersey: JERSEYS[i % JERSEYS.length],
+      helmet: "#f8fafc",
+      useZoneSpeed: true,
+      speedKmh: 26
+    }))
   },
   "keirin": {
     id: "keirin",
-    name: "🏍️ Keirin Derny Pace",
-    ruleMode: "banking-pace",
-    speeds: { pack: 48, build: 50, sprint: 62, station: 30 },
-    sequence: [],
-    riders: buildKeirin()
+    name: "🏍️ Keirin Derny & 4 Sprinters",
+    zoneSpeeds: { low: 48, mid: 38, high: 28 },
+    riders: [
+      { id: "derny", type: "derny", s: 0.25, laneOffset: LANES.RED, useZoneSpeed: true, speedKmh: 48 },
+      ...Array.from({ length: 4 }, (_, i) => ({
+        id: `k-${i}`,
+        s: 0.22 - i * 0.025,
+        laneOffset: LANES.RED,
+        jersey: "#0284c7",
+        helmet: HELMETS[i],
+        useZoneSpeed: true,
+        speedKmh: 48
+      }))
+    ]
   }
 };
-
-function buildSixPairs() {
-  const riders = [];
-  for (let p = 0; p < 6; p++) {
-    const s = 0.24 - p * 0.024;
-    const color = HELMET_COLORS[p % HELMET_COLORS.length];
-    riders.push(
-      { id: `p${p}-in`, pairIndex: p, slot: "in", s, laneOffset: LANES.BLACK + 2, speedKmh: 38, jersey: color, helmet: "#f8fafc", label: `P${p + 1}` },
-      { id: `p${p}-out`, pairIndex: p, slot: "out", s, laneOffset: LANES.RED + 4, speedKmh: 38, jersey: color, helmet: "#0f172a" }
-    );
-  }
-  return riders;
-}
-
-function buildTrainsAndStations() {
-  const riders = [];
-  for (let i = 0; i < 6; i++) {
-    riders.push({
-      id: `train-${i}`,
-      role: "train",
-      s: 0.22 - i * 0.021,
-      laneOffset: LANES.BLACK,
-      speedKmh: 44,
-      jersey: "#0284c7",
-      helmet: HELMET_COLORS[i % HELMET_COLORS.length]
-    });
-  }
-  for (let i = 0; i < 3; i++) {
-    riders.push({
-      id: `st1-${i}`,
-      role: "station",
-      s: 0.30 - i * 0.021,
-      laneOffset: LANES.BLUE + 24,
-      speedKmh: 28,
-      jersey: "#f59e0b",
-      helmet: "#0f172a"
-    });
-  }
-  for (let i = 0; i < 3; i++) {
-    riders.push({
-      id: `st2-${i}`,
-      role: "station",
-      s: 0.74 - i * 0.021,
-      laneOffset: LANES.BLUE + 24,
-      speedKmh: 28,
-      jersey: "#10b981",
-      helmet: "#0f172a"
-    });
-  }
-  return riders;
-}
-
-function buildSeansGame() {
-  const riders = [];
-  for (let i = 0; i < 5; i++) {
-    riders.push({
-      id: `sean-train-${i}`,
-      role: "train",
-      s: 0.20 - i * 0.021,
-      laneOffset: LANES.BLACK,
-      speedKmh: 43,
-      jersey: "#0284c7",
-      helmet: HELMET_COLORS[i % HELMET_COLORS.length]
-    });
-  }
-  const scatterS = [0.28, 0.35, 0.44, 0.57, 0.69, 0.81, 0.92, 0.05];
-  const scatterLane = [76, 98, 84, 118, 78, 112, 88, 102];
-  for (let i = 0; i < 8; i++) {
-    riders.push({
-      id: `sean-high-${i}`,
-      role: "station",
-      s: scatterS[i],
-      laneOffset: scatterLane[i],
-      speedKmh: 28,
-      jersey: "#e11d48",
-      helmet: "#f8fafc"
-    });
-  }
-  return riders;
-}
-
-function buildFindAFriend() {
-  const riders = [];
-  for (let i = 0; i < 10; i++) {
-    riders.push({
-      id: `faf-${i}`,
-      role: "station",
-      s: (i * 0.095 + 0.04) % 1,
-      laneOffset: LANES.BLUE + 18 + (i % 3) * 26,
-      speedKmh: 30,
-      jersey: HELMET_COLORS[i % HELMET_COLORS.length],
-      helmet: "#f8fafc"
-    });
-  }
-  return riders;
-}
-
-function buildKeirin() {
-  const riders = [
-    { id: "derny", type: "derny", s: 0.25, laneOffset: LANES.RED, speedKmh: 48 }
-  ];
-  for (let i = 0; i < 4; i++) {
-    riders.push({
-      id: `keirin-${i}`,
-      role: "train",
-      s: 0.222 - i * 0.022,
-      laneOffset: LANES.RED,
-      speedKmh: 48,
-      jersey: "#0284c7",
-      helmet: HELMET_COLORS[i]
-    });
-  }
-  return riders;
-}
