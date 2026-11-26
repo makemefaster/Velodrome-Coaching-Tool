@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Velodrome Coaching Board</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- Lightweight client-side GIF encoder -->
   <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 </head>
 <body>
@@ -17,7 +16,7 @@
 
     <nav class="tabs" role="tablist">
       <button class="tab-btn active" data-tab="board-view">1. Track Display Board</button>
-      <button class="tab-btn" data-tab="studio-view">2. Drill & Rules Studio</button>
+      <button class="tab-btn" data-tab="studio-view">2. Drill & Sequence Studio</button>
     </nav>
 
     <div class="header-actions">
@@ -33,11 +32,11 @@
 
       <!-- Compact Top-Right Status Pill -->
       <div class="hud-pill" id="telemetry-hud">
-        <span id="hud-drill-name">6 Pairs Whistle Build & Sprint</span>
+        <span id="hud-drill-name">Drill</span>
         <span class="divider">•</span>
-        <span id="hud-phase">Phase: Steady Pack</span>
+        <span id="hud-phase">Ready</span>
         <span class="divider">•</span>
-        <span id="hud-gap">Gap: 0.0m</span>
+        <span id="hud-gap">0.0s</span>
       </div>
     </div>
 
@@ -45,7 +44,20 @@
     <div class="control-dock">
       <div class="dock-group">
         <button id="btn-play" class="btn primary">▶ Play</button>
-        <button id="btn-whistle" class="btn accent" title="Shortcut: W">📣 Blow Whistle (W)</button>
+        <button id="btn-whistle" class="btn accent" title="Shortcut: W">📣 Whistle (W)</button>
+      </div>
+
+      <!-- Rider Transfer Controls (Blue <-> Black) -->
+      <div class="dock-group transfer-group">
+        <label class="dock-label" for="transfer-count">Riders:</label>
+        <select id="transfer-count" class="mini-select" title="Number of riders to move">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+        <button id="btn-drop-black" class="btn secondary" title="Send N riders from Blue Station down to Black Paceline">⬇ Drop to Black</button>
+        <button id="btn-peel-blue" class="btn secondary" title="Send N front riders from Black Paceline up to Blue">⬆ Peel to Blue</button>
       </div>
 
       <div class="dock-group">
@@ -53,59 +65,81 @@
         <button class="tool-btn" data-tool="swing-up">⤴ Swing ▲</button>
         <button class="tool-btn" data-tool="swing-down">⤵ Swing ▼</button>
         <button class="tool-btn" data-tool="arrow">↗ Arrow</button>
-        <button id="btn-clear-drawings" class="btn ghost">Clear Lines</button>
+        <button id="btn-clear-drawings" class="btn ghost">Clear</button>
       </div>
 
       <div class="dock-group">
         <button id="btn-view-mode" class="btn secondary">View: Full Oval</button>
-        <button id="btn-export-gif" class="btn success">🎬 Export GIF</button>
+        <button id="btn-export-gif" class="btn success">🎬 GIF</button>
       </div>
     </div>
   </main>
 
-  <!-- SCREEN 2: DRILL SETUP & RULES STUDIO -->
+  <!-- SCREEN 2: DRILL SETUP & PRE-PROGRAMMED MOVES STUDIO -->
   <main id="studio-view" class="screen">
     <div class="studio-grid">
+      <!-- Left Column: Speeds & Pre-Programmed Move Timeline -->
       <section class="card">
-        <h2>Live Pace & Rule Tuning</h2>
-        <p class="muted">Adjust speeds in real time and switch back to the Track Display Board to observe spacing and catches.</p>
-
+        <h2>Live Pace & Speed Settings</h2>
         <div class="form-row">
-          <label>Main Pack / Train Speed (Black Line): <strong id="val-pack-speed">38</strong> km/h</label>
-          <input type="range" id="input-pack-speed" min="25" max="55" value="38" />
+          <label>Main Pack / Train Speed (Black Line): <strong id="val-pack-speed">42</strong> km/h</label>
+          <input type="range" id="input-pack-speed" min="25" max="60" value="42" />
         </div>
 
         <div class="form-row">
-          <label>High Build / Attack Speed (Above Blue): <strong id="val-build-speed">43</strong> km/h</label>
-          <input type="range" id="input-build-speed" min="25" max="60" value="43" />
+          <label>High Build / Attack Speed (Above Blue): <strong id="val-build-speed">45</strong> km/h</label>
+          <input type="range" id="input-build-speed" min="25" max="62" value="45" />
         </div>
 
         <div class="form-row">
           <label>Full Sprint Speed: <strong id="val-sprint-speed">54</strong> km/h</label>
-          <input type="range" id="input-sprint-speed" min="40" max="68" value="54" />
+          <input type="range" id="input-sprint-speed" min="35" max="68" value="54" />
         </div>
 
         <div class="form-row">
-          <label>Station Holding Speed (High Banking): <strong id="val-station-speed">12</strong> km/h</label>
-          <input type="range" id="input-station-speed" min="0" max="30" value="12" />
+          <label>Station Holding Speed (High Banking): <strong id="val-station-speed">28</strong> km/h</label>
+          <input type="range" id="input-station-speed" min="25" max="60" value="28" />
         </div>
 
         <div class="form-row checkbox-row">
           <input type="checkbox" id="chk-auto-bank" checked />
-          <label for="chk-auto-bank">Natural Banking Physics (slow down higher up the banking when dragging manually)</label>
+          <label for="chk-auto-bank">Natural Banking Physics (adjust speed automatically by track height)</label>
         </div>
 
         <hr />
-        <h3>Add Track Elements</h3>
+        <h2>Pre-Programmed Coaching Moves</h2>
+        <p class="muted">Schedule moves at specific seconds so your drill plays out automatically on the Display Board and in GIF exports.</p>
+
+        <div class="seq-builder">
+          <input type="number" id="seq-time" min="0" max="120" step="0.5" value="2.0" title="Trigger time in seconds" />
+          <span class="muted">sec →</span>
+          <select id="seq-action">
+            <option value="drop-black">⬇ Drop to Black</option>
+            <option value="peel-blue">⬆ Peel to Blue</option>
+            <option value="whistle">📣 Blow Whistle</option>
+          </select>
+          <select id="seq-count" title="Number of riders">
+            <option value="1">1 rider</option>
+            <option value="2" selected>2 riders</option>
+            <option value="3">3 riders</option>
+            <option value="4">4 riders</option>
+          </select>
+          <button id="btn-add-step" class="btn primary">+ Add Step</button>
+        </div>
+
+        <ul id="sequence-list" class="sequence-list"></ul>
+
         <div class="button-row">
+          <button id="btn-clear-seq" class="btn ghost">Clear Sequence</button>
           <button id="btn-add-rider" class="btn secondary">+ Add Rider</button>
           <button id="btn-add-derny" class="btn secondary">+ Add Derny</button>
         </div>
       </section>
 
+      <!-- Right Column: JSON Definition -->
       <section class="card">
-        <h2>Drill JSON Definition (Share & Edit)</h2>
-        <p class="muted">Edit rider positions, colors, and autonomous rule triggers directly, or paste a JSON drill shared by another coach.</p>
+        <h2>Drill & Sequence JSON (Save / Share)</h2>
+        <p class="muted">Your pre-programmed move sequence, rider lanes, and speeds are saved inside this JSON so you can export or share complete sessions with other coaches.</p>
         <textarea id="json-editor" spellcheck="false"></textarea>
         <div class="button-row">
           <button id="btn-apply-json" class="btn primary">Apply Drill to Board</button>
