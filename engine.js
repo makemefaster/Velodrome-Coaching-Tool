@@ -1,6 +1,5 @@
 import { LANES } from "./track.js";
 
-// 250m Olympic track length in meters
 const TRACK_METERS = 250;
 
 export function createDrillState(preset) {
@@ -10,18 +9,15 @@ export function createDrillState(preset) {
     ruleMode: preset.ruleMode || "banking-pace",
     speeds: { ...preset.speeds },
     autoBank: true,
-    riders: structuredClone(preset.riders),
+    riders: JSON.parse(JSON.stringify(preset.riders)),
     whistleState: {
       activePair: 0,
-      phase: "steady", // steady | build | sprint | rejoin
+      phase: "steady",
       phaseProgress: 0
     }
   };
 }
 
-/**
- * Triggered when the coach presses "Blow Whistle" (or W key).
- */
 export function triggerWhistle(drill) {
   if (drill.ruleMode !== "six-pairs-whistle") return;
 
@@ -35,9 +31,6 @@ export function triggerWhistle(drill) {
   }
 }
 
-/**
- * Advances simulation by `dt` seconds.
- */
 export function stepSimulation(drill, dt, draggingRider = null) {
   if (drill.ruleMode === "six-pairs-whistle") {
     stepSixPairsWhistle(drill, dt, draggingRider);
@@ -49,7 +42,6 @@ export function stepSimulation(drill, dt, draggingRider = null) {
 }
 
 function advanceRider(rider, speedKmh, dt) {
-  // Effective circumference increases ~11% near the top of the banking
   const circumferenceFactor = 1 + (Math.max(0, rider.laneOffset) / 140) * 0.11;
   const metersPerSec = (speedKmh * 1000) / 3600;
   const ds = (metersPerSec * dt) / (TRACK_METERS * circumferenceFactor);
@@ -88,9 +80,8 @@ function stepStationCatchPeel(drill, dt, draggingRider) {
     st.speedKmh = drill.speeds.station;
     advanceRider(st, st.speedKmh, dt);
 
-    // If train passes directly underneath a station rider, front rider catches onto train
     if (leadTrain) {
-      const dist = ((st.s - leadTrain.s + 1) % 1);
+      const dist = (st.s - leadTrain.s + 1) % 1;
       if (dist > 0.005 && dist < 0.025 && st.laneOffset > LANES.BLUE) {
         st.role = "train";
         trainRiders.unshift(st);
@@ -104,7 +95,6 @@ function stepSixPairsWhistle(drill, dt, draggingRider) {
   const activeRiders = drill.riders.filter((r) => r.pairIndex === ws.activePair);
   const packRiders = drill.riders.filter((r) => r.pairIndex !== ws.activePair);
 
-  // Move main pack steadily on the black/red lines
   for (const r of packRiders) {
     if (r === draggingRider) continue;
     const targetLane = r.slot === "in" ? LANES.BLACK + 2 : LANES.RED + 4;
@@ -113,7 +103,6 @@ function stepSixPairsWhistle(drill, dt, draggingRider) {
     advanceRider(r, r.speedKmh, dt);
   }
 
-  // Move active pair according to current whistle phase
   let targetLaneIn = LANES.BLACK + 2;
   let targetLaneOut = LANES.RED + 4;
   let targetSpeed = drill.speeds.pack;
@@ -141,26 +130,22 @@ function stepSixPairsWhistle(drill, dt, draggingRider) {
     const prevS = r.s;
     advanceRider(r, r.speedKmh, dt);
     if (r.slot === "in") {
-      const deltaS = ((r.s - prevS + 1) % 1);
+      const deltaS = (r.s - prevS + 1) % 1;
       ws.phaseProgress += deltaS;
     }
   }
 
-  // Automatic lap transitions
   if (ws.phase === "build" && ws.phaseProgress >= 1.0) {
-    // Auto-trigger Whistle 2 after 1 full build lap if coach hasn't clicked manually
     ws.phase = "sprint";
     ws.phaseProgress = 0;
   } else if (ws.phase === "sprint" && ws.phaseProgress >= 1.0) {
-    // Swing high after finishing the 1-lap sprint
     ws.phase = "rejoin";
     ws.phaseProgress = 0;
   } else if (ws.phase === "rejoin") {
-    // Check when the back of the pack catches up underneath the high pair
     const leadActive = activeRiders[0];
     const tailPack = packRiders.reduce((minR, r) => (r.s < minR.s ? r : minR), packRiders[0]);
     if (leadActive && tailPack) {
-      const gap = ((leadActive.s - tailPack.s + 1) % 1);
+      const gap = (leadActive.s - tailPack.s + 1) % 1;
       if (gap > 0.96 || gap < 0.025) {
         ws.phase = "steady";
         ws.phaseProgress = 0;
@@ -170,14 +155,11 @@ function stepSixPairsWhistle(drill, dt, draggingRider) {
   }
 }
 
-/**
- * Returns live telemetry strings for the Track Display HUD.
- */
 export function getHudTelemetry(drill) {
   if (drill.ruleMode === "six-pairs-whistle") {
     const ws = drill.whistleState;
     const labels = {
-      steady: "Steady Pack (38 km/h)",
+      steady: `Steady Pack (${drill.speeds.pack} km/h)`,
       build: `Whistle 1: Pair ${ws.activePair + 1} High Build Lap`,
       sprint: `Whistle 2: Pair ${ws.activePair + 1} Full Sprint Lap`,
       rejoin: `Pair ${ws.activePair + 1} Swinging High to Rejoin`
