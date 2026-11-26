@@ -8,8 +8,8 @@ canvas.width = OVAL_WIDTH;
 canvas.height = OVAL_HEIGHT;
 
 const state = {
-  viewMode: "oval", // "oval" | "closeup"
-  tool: "move",     // "move" | "swing-up" | "swing-down" | "arrow"
+  viewMode: "oval",
+  tool: "move",
   playing: false,
   drill: createDrillState(DRILL_PRESETS["six-pairs-whistle"]),
   drawings: [],
@@ -18,7 +18,6 @@ const state = {
   activeDrawing: null
 };
 
-// Populate Preset Selector
 const presetSelect = document.getElementById("preset-select");
 for (const [key, preset] of Object.entries(DRILL_PRESETS)) {
   const opt = document.createElement("option");
@@ -28,6 +27,7 @@ for (const [key, preset] of Object.entries(DRILL_PRESETS)) {
 }
 
 function loadPreset(key) {
+  if (!DRILL_PRESETS[key]) return;
   state.drill = createDrillState(DRILL_PRESETS[key]);
   state.drawings = [];
   state.selectedRider = null;
@@ -37,7 +37,7 @@ function loadPreset(key) {
 presetSelect.addEventListener("change", (e) => loadPreset(e.target.value));
 document.getElementById("btn-reset").addEventListener("click", () => loadPreset(presetSelect.value));
 
-// Screen Tab Switching (Display Board vs. Drill Studio)
+// Screen Tab Switching
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
@@ -94,7 +94,6 @@ btnViewMode.addEventListener("click", () => {
   btnViewMode.textContent = state.viewMode === "oval" ? "View: Full Oval" : "View: Close-Up";
 });
 
-// Canvas Pointer Coordinates Helper
 function getLogicalPoint(e) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -108,7 +107,7 @@ canvas.addEventListener("pointerdown", (e) => {
 
   if (state.tool === "move") {
     let closest = null;
-    let minDist = 26;
+    let minDist = 28;
     for (const r of state.drill.riders) {
       const pos = trackToCanvas(r.s, r.laneOffset, state.viewMode);
       const d = Math.hypot(pos.x - pt.x, pos.y - pt.y);
@@ -149,7 +148,6 @@ window.addEventListener("pointerup", () => {
   state.activeDrawing = null;
 });
 
-// Studio Sliders & JSON Sync
 function syncStudioInputs() {
   const s = state.drill.speeds;
   document.getElementById("input-pack-speed").value = s.pack;
@@ -234,7 +232,6 @@ document.getElementById("file-import-json").addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 
-// GIF Export (Captures 4 seconds of live track animation)
 document.getElementById("btn-export-gif").addEventListener("click", async () => {
   const btn = document.getElementById("btn-export-gif");
   if (typeof GIF === "undefined") {
@@ -245,7 +242,6 @@ document.getElementById("btn-export-gif").addEventListener("click", async () => 
   btn.textContent = "⏳ Recording GIF...";
   btn.disabled = true;
 
-  // Fetch worker script as Blob so it works cleanly on GitHub Pages without cross-origin errors
   const workerRes = await fetch("https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js");
   const workerBlob = new Blob([await workerRes.text()], { type: "application/javascript" });
   const workerUrl = URL.createObjectURL(workerBlob);
@@ -286,7 +282,6 @@ document.getElementById("btn-export-gif").addEventListener("click", async () => 
   gif.render();
 });
 
-// Main Animation Loop
 let lastTime = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
