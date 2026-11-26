@@ -14,143 +14,61 @@
       <h1>Velodrome Coaching Board</h1>
     </div>
 
-    <nav class="tabs" role="tablist">
-      <button class="tab-btn active" data-tab="board-view">1. Track Display Board</button>
-      <button class="tab-btn" data-tab="studio-view">2. Drill & Sequence Studio</button>
-    </nav>
-
     <div class="header-actions">
-      <select id="preset-select" title="Load Coaching Drill"></select>
-      <button id="btn-reset" class="btn secondary">Reset</button>
+      <select id="preset-select" title="Load Formation Preset"></select>
+      <button id="btn-add-rider" class="btn secondary">+ Cyclist</button>
+      <button id="btn-add-derny" class="btn secondary">+ Derny</button>
+      <button id="btn-reset" class="btn ghost">Reset</button>
     </div>
   </header>
 
-  <!-- SCREEN 1: DISTRACTION-FREE TRACK DISPLAY BOARD -->
-  <main id="board-view" class="screen active">
-    <div class="canvas-stage" id="canvas-stage">
+  <main class="board-layout">
+    <!-- Main Track Canvas -->
+    <div class="canvas-stage">
       <canvas id="track-canvas"></canvas>
 
-      <!-- Compact Top-Right Status Pill -->
-      <div class="hud-pill" id="telemetry-hud">
-        <span id="hud-drill-name">Drill</span>
-        <span class="divider">•</span>
-        <span id="hud-phase">Ready</span>
-        <span class="divider">•</span>
-        <span id="hud-gap">0.0s</span>
+      <!-- Selected Rider Quick Inspector (appears when you click a cyclist) -->
+      <div class="rider-inspector hidden" id="rider-inspector">
+        <span class="inspector-title" id="insp-title">Cyclist #1</span>
+        <label>Jersey <input type="color" id="insp-jersey" value="#0284c7" /></label>
+        <label>Helmet <input type="color" id="insp-helmet" value="#ef4444" /></label>
+        <label>Speed: <strong id="insp-speed-val">42</strong> km/h
+          <input type="range" id="insp-speed" min="15" max="65" value="42" />
+        </label>
+        <button id="insp-lock-zone" class="btn mini" title="Use track height speed vs custom speed">Zone Speed: ON</button>
+        <button id="insp-delete" class="btn mini danger" title="Remove rider">✕</button>
       </div>
     </div>
 
-    <!-- Bottom Floating Control Dock -->
+    <!-- Bottom Control Bar -->
     <div class="control-dock">
+      <!-- Playback & Zone Speeds -->
       <div class="dock-group">
         <button id="btn-play" class="btn primary">▶ Play</button>
-        <button id="btn-whistle" class="btn accent" title="Shortcut: W">📣 Whistle (W)</button>
+        <div class="speed-pills" title="Set speed by track height">
+          <label>Low (Black/Red): <input type="number" id="speed-low" min="15" max="65" value="45" /> km/h</label>
+          <label>Mid (Blue): <input type="number" id="speed-mid" min="15" max="65" value="35" /> km/h</label>
+          <label>High (Banking): <input type="number" id="speed-high" min="10" max="60" value="25" /> km/h</label>
+        </div>
       </div>
 
-      <!-- Rider Transfer Controls (Blue <-> Black) -->
-      <div class="dock-group transfer-group">
-        <label class="dock-label" for="transfer-count">Riders:</label>
-        <select id="transfer-count" class="mini-select" title="Number of riders to move">
-          <option value="1">1</option>
-          <option value="2" selected>2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-        </select>
-        <button id="btn-drop-black" class="btn secondary" title="Send N riders from Blue Station down to Black Paceline">⬇ Drop to Black</button>
-        <button id="btn-peel-blue" class="btn secondary" title="Send N front riders from Black Paceline up to Blue">⬆ Peel to Blue</button>
-      </div>
-
+      <!-- Drawing Tools -->
       <div class="dock-group">
-        <button class="tool-btn active" data-tool="move">✋ Move</button>
+        <button class="tool-btn active" data-tool="move">✋ Drag</button>
         <button class="tool-btn" data-tool="swing-up">⤴ Swing ▲</button>
         <button class="tool-btn" data-tool="swing-down">⤵ Swing ▼</button>
         <button class="tool-btn" data-tool="arrow">↗ Arrow</button>
-        <button id="btn-clear-drawings" class="btn ghost">Clear</button>
+        <button id="btn-clear-drawings" class="btn ghost">Clear Lines</button>
       </div>
 
+      <!-- View & Image / GIF Export -->
       <div class="dock-group">
         <button id="btn-view-mode" class="btn secondary">View: Full Oval</button>
-        <button id="btn-export-gif" class="btn success">🎬 GIF</button>
+        <button id="btn-snapshot-png" class="btn secondary" title="Download current frame as PNG">📸 PNG</button>
+        <button id="btn-capture-frame" class="btn accent" title="Add current view to GIF storyboard">+ Frame (<span id="frame-count">0</span>)</button>
+        <button id="btn-export-gif" class="btn success" title="Export captured frames (or 4s live motion) as GIF">🎬 Export GIF</button>
+        <button id="btn-clear-frames" class="btn ghost" title="Clear captured GIF frames">✕</button>
       </div>
-    </div>
-  </main>
-
-  <!-- SCREEN 2: DRILL SETUP & PRE-PROGRAMMED MOVES STUDIO -->
-  <main id="studio-view" class="screen">
-    <div class="studio-grid">
-      <!-- Left Column: Speeds & Pre-Programmed Move Timeline -->
-      <section class="card">
-        <h2>Live Pace & Speed Settings</h2>
-        <div class="form-row">
-          <label>Main Pack / Train Speed (Black Line): <strong id="val-pack-speed">42</strong> km/h</label>
-          <input type="range" id="input-pack-speed" min="25" max="60" value="42" />
-        </div>
-
-        <div class="form-row">
-          <label>High Build / Attack Speed (Above Blue): <strong id="val-build-speed">45</strong> km/h</label>
-          <input type="range" id="input-build-speed" min="25" max="62" value="45" />
-        </div>
-
-        <div class="form-row">
-          <label>Full Sprint Speed: <strong id="val-sprint-speed">54</strong> km/h</label>
-          <input type="range" id="input-sprint-speed" min="35" max="68" value="54" />
-        </div>
-
-        <div class="form-row">
-          <label>Station Holding Speed (High Banking): <strong id="val-station-speed">28</strong> km/h</label>
-          <input type="range" id="input-station-speed" min="25" max="60" value="28" />
-        </div>
-
-        <div class="form-row checkbox-row">
-          <input type="checkbox" id="chk-auto-bank" checked />
-          <label for="chk-auto-bank">Natural Banking Physics (adjust speed automatically by track height)</label>
-        </div>
-
-        <hr />
-        <h2>Pre-Programmed Coaching Moves</h2>
-        <p class="muted">Schedule moves at specific seconds so your drill plays out automatically on the Display Board and in GIF exports.</p>
-
-        <div class="seq-builder">
-          <input type="number" id="seq-time" min="0" max="120" step="0.5" value="2.0" title="Trigger time in seconds" />
-          <span class="muted">sec →</span>
-          <select id="seq-action">
-            <option value="drop-black">⬇ Drop to Black</option>
-            <option value="peel-blue">⬆ Peel to Blue</option>
-            <option value="whistle">📣 Blow Whistle</option>
-          </select>
-          <select id="seq-count" title="Number of riders">
-            <option value="1">1 rider</option>
-            <option value="2" selected>2 riders</option>
-            <option value="3">3 riders</option>
-            <option value="4">4 riders</option>
-          </select>
-          <button id="btn-add-step" class="btn primary">+ Add Step</button>
-        </div>
-
-        <ul id="sequence-list" class="sequence-list"></ul>
-
-        <div class="button-row">
-          <button id="btn-clear-seq" class="btn ghost">Clear Sequence</button>
-          <button id="btn-add-rider" class="btn secondary">+ Add Rider</button>
-          <button id="btn-add-derny" class="btn secondary">+ Add Derny</button>
-        </div>
-      </section>
-
-      <!-- Right Column: JSON Definition -->
-      <section class="card">
-        <h2>Drill & Sequence JSON (Save / Share)</h2>
-        <p class="muted">Your pre-programmed move sequence, rider lanes, and speeds are saved inside this JSON so you can export or share complete sessions with other coaches.</p>
-        <textarea id="json-editor" spellcheck="false"></textarea>
-        <div class="button-row">
-          <button id="btn-apply-json" class="btn primary">Apply Drill to Board</button>
-          <button id="btn-download-json" class="btn secondary">Download .JSON</button>
-          <label class="btn secondary file-label">
-            Load .JSON
-            <input type="file" id="file-import-json" accept=".json" hidden />
-          </label>
-        </div>
-        <p id="json-status" class="status-msg"></p>
-      </section>
     </div>
   </main>
 
