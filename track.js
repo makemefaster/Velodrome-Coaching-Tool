@@ -130,9 +130,10 @@ export function renderTrack(ctx, state) {
     drawOvalSurface(ctx);
   }
 
-  drawAnnotations(ctx, state.drawings);
+  drawAnnotations(ctx, state.drawings || []);
 
-  for (const rider of state.riders) {
+  const riders = state.drill ? state.drill.riders : (state.riders || []);
+  for (const rider of riders) {
     const pos = trackToCanvas(rider.s, rider.laneOffset, state.viewMode);
     if (rider.type === "derny") {
       drawDerny(ctx, pos.x, pos.y, pos.angle, rider === state.selectedRider);
