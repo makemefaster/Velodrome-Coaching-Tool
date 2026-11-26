@@ -1,13 +1,6 @@
 import { OVAL_WIDTH, OVAL_HEIGHT, LANES, trackToCanvas, canvasToTrack, renderTrack } from "./track.js";
 import { DRILL_PRESETS } from "./presets.js";
-import {
-  createDrillState,
-  commandDropToBlack,
-  commandPeelToBlue,
-  triggerWhistle,
-  stepSimulation,
-  getHudTelemetry
-} from "./engine.js";
+import { createDrillState, getRiderSpeed, stepSimulation } from "./engine.js";
 
 const canvas = document.getElementById("track-canvas");
 const ctx = canvas.getContext("2d");
@@ -22,9 +15,11 @@ const state = {
   drawings: [],
   selectedRider: null,
   draggingRider: null,
-  activeDrawing: null
+  activeDrawing: null,
+  capturedFrames: [] // Stores coach-captured storyboard frames for GIF export
 };
 
+// Populate Presets
 const presetSelect = document.getElementById("preset-select");
 for (const [key, preset] of Object.entries(DRILL_PRESETS)) {
   const opt = document.createElement("option");
@@ -37,27 +32,42 @@ function loadPreset(key) {
   if (!DRILL_PRESETS[key]) return;
   state.drill = createDrillState(DRILL_PRESETS[key]);
   state.drawings = [];
-  state.selectedRider = null;
-  syncStudioInputs();
+  selectRider(null);
+  syncZoneInputs();
 }
 
 presetSelect.addEventListener("change", (e) => loadPreset(e.target.value));
 document.getElementById("btn-reset").addEventListener("click", () => loadPreset(presetSelect.value));
 
-// Tab Switching
-document.querySelectorAll(".tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-    document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(btn.dataset.tab).classList.add("active");
-    if (btn.dataset.tab === "studio-view") {
-      syncStudioInputs();
-    }
-  });
+// Add Cyclist / Derny
+document.getElementById("btn-add-rider").addEventListener("click", () => {
+  const rider = {
+    id: `rider-${Date.now()}`,
+    s: 0.25,
+    laneOffset: LANES.BLACK,
+    jersey: "#7c3aed",
+    helmet: "#facc15",
+    useZoneSpeed: true,
+    speedKmh: state.drill.zoneSpeeds.low
+  };
+  state.drill.riders.push(rider);
+  selectRider(rider);
 });
 
-// Play / Pause & Whistle
+document.getElementById("btn-add-derny").addEventListener("click", () => {
+  const derny = {
+    id: `derny-${Date.now()}`,
+    type: "derny",
+    s: 0.28,
+    laneOffset: LANES.RED,
+    useZoneSpeed: true,
+    speedKmh: state.drill.zoneSpeeds.low
+  };
+  state.drill.riders.push(derny);
+  selectRider(derny);
+});
+
+// Play / Pause
 const btnPlay = document.getElementById("btn-play");
 function togglePlay() {
   state.playing = !state.playing;
@@ -65,35 +75,81 @@ function togglePlay() {
 }
 btnPlay.addEventListener("click", togglePlay);
 
-document.getElementById("btn-whistle").addEventListener("click", () => {
-  if (!state.playing) togglePlay();
-  triggerWhistle(state.drill);
-});
-
-// Drop to Black & Peel to Blue Controls
-const transferCountEl = document.getElementById("transfer-count");
-document.getElementById("btn-drop-black").addEventListener("click", () => {
-  if (!state.playing) togglePlay();
-  commandDropToBlack(state.drill, Number(transferCountEl.value));
-});
-
-document.getElementById("btn-peel-blue").addEventListener("click", () => {
-  if (!state.playing) togglePlay();
-  commandPeelToBlue(state.drill, Number(transferCountEl.value));
-});
-
 window.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
   if (e.code === "Space") {
     e.preventDefault();
     togglePlay();
-  } else if (e.key.toLowerCase() === "w") {
-    if (!state.playing) togglePlay();
-    triggerWhistle(state.drill);
   }
 });
 
-// Tool Buttons
+// Zone Speed Inputs
+function syncZoneInputs() {
+  document.getElementById("speed-low").value = state.drill.zoneSpeeds.low;
+  document.getElementById("speed-mid").value = state.drill.zoneSpeeds.mid;
+  document.getElementById("speed-high").value = state.drill.zoneSpeeds.high;
+}
+
+["low", "mid", "high"].forEach((zone) => {
+  document.getElementById(`speed-${zone}`).addEventListener("input", (e) => {
+    state.drill.zoneSpeeds[zone] = Number(e.target.value) || 25;
+    if (state.selectedRider) updateInspector();
+  });
+});
+
+// Selected Rider Inspector (Jersey, Helmet, Individual Speed)
+const inspector = document.getElementById("rider-inspector");
+function selectRider(rider) {
+  state.selectedRider = rider;
+  if (!rider) {
+    inspector.classList.add("hidden");
+    return;
+  }
+  inspector.classList.remove("hidden");
+  updateInspector();
+}
+
+function updateInspector() {
+  const r = state.selectedRider;
+  if (!r) return;
+  const idx = state.drill.riders.indexOf(r) + 1;
+  document.getElementById("insp-title").textContent = r.type === "derny" ? "Derny Pacer" : `Cyclist #${idx}`;
+  document.getElementById("insp-jersey").value = r.jersey || "#0284c7";
+  document.getElementById("insp-helmet").value = r.helmet || "#ef4444";
+  const spd = Math.round(getRiderSpeed(r, state.drill.zoneSpeeds));
+  document.getElementById("insp-speed").value = spd;
+  document.getElementById("insp-speed-val").textContent = spd;
+  document.getElementById("insp-lock-zone").textContent = r.useZoneSpeed !== false ? "Zone Speed: ON" : "Custom Speed";
+}
+
+document.getElementById("insp-jersey").addEventListener("input", (e) => {
+  if (state.selectedRider) state.selectedRider.jersey = e.target.value;
+});
+
+document.getElementById("insp-helmet").addEventListener("input", (e) => {
+  if (state.selectedRider) state.selectedRider.helmet = e.target.value;
+});
+
+document.getElementById("insp-speed").addEventListener("input", (e) => {
+  if (!state.selectedRider) return;
+  state.selectedRider.useZoneSpeed = false;
+  state.selectedRider.speedKmh = Number(e.target.value);
+  updateInspector();
+});
+
+document.getElementById("insp-lock-zone").addEventListener("click", () => {
+  if (!state.selectedRider) return;
+  state.selectedRider.useZoneSpeed = state.selectedRider.useZoneSpeed === false;
+  updateInspector();
+});
+
+document.getElementById("insp-delete").addEventListener("click", () => {
+  if (!state.selectedRider) return;
+  state.drill.riders = state.drill.riders.filter((r) => r !== state.selectedRider);
+  selectRider(null);
+});
+
+// Drawing Tools
 document.querySelectorAll(".tool-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tool-btn").forEach((b) => b.classList.remove("active"));
@@ -106,13 +162,14 @@ document.getElementById("btn-clear-drawings").addEventListener("click", () => {
   state.drawings = [];
 });
 
-// View Toggle
+// View Mode Toggle
 const btnViewMode = document.getElementById("btn-view-mode");
 btnViewMode.addEventListener("click", () => {
   state.viewMode = state.viewMode === "oval" ? "closeup" : "oval";
   btnViewMode.textContent = state.viewMode === "oval" ? "View: Full Oval" : "View: Close-Up";
 });
 
+// Pointer Dragging & Drawing
 function getLogicalPoint(e) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -126,7 +183,7 @@ canvas.addEventListener("pointerdown", (e) => {
 
   if (state.tool === "move") {
     let closest = null;
-    let minDist = 28;
+    let minDist = 30;
     for (const r of state.drill.riders) {
       const pos = trackToCanvas(r.s, r.laneOffset, state.viewMode);
       const d = Math.hypot(pos.x - pt.x, pos.y - pt.y);
@@ -135,7 +192,7 @@ canvas.addEventListener("pointerdown", (e) => {
         closest = r;
       }
     }
-    state.selectedRider = closest;
+    selectRider(closest);
     state.draggingRider = closest;
   } else {
     state.activeDrawing = {
@@ -153,10 +210,10 @@ canvas.addEventListener("pointerdown", (e) => {
 canvas.addEventListener("pointermove", (e) => {
   const pt = getLogicalPoint(e);
   if (state.draggingRider) {
-    const trackCoords = canvasToTrack(pt.x, pt.y, state.viewMode);
-    state.draggingRider.s = trackCoords.s;
-    state.draggingRider.laneOffset = trackCoords.laneOffset;
-    state.draggingRider.targetLane = trackCoords.laneOffset;
+    const coords = canvasToTrack(pt.x, pt.y, state.viewMode);
+    state.draggingRider.s = coords.s;
+    state.draggingRider.laneOffset = coords.laneOffset;
+    updateInspector();
   } else if (state.activeDrawing) {
     state.activeDrawing.x2 = pt.x;
     state.activeDrawing.y2 = pt.y;
@@ -168,147 +225,51 @@ window.addEventListener("pointerup", () => {
   state.activeDrawing = null;
 });
 
-// Pre-Programmed Sequence List & Studio Sync
-function renderSequenceList() {
-  const listEl = document.getElementById("sequence-list");
-  listEl.innerHTML = "";
-  const seq = state.drill.sequence || [];
-  if (seq.length === 0) {
-    listEl.innerHTML = `<li style="color:#94a3b8;font-weight:400">No programmed moves yet. Add a timed step above.</li>`;
-    return;
-  }
+// 1. Download Individual PNG Snapshot
+document.getElementById("btn-snapshot-png").addEventListener("click", () => {
+  const prevSelected = state.selectedRider;
+  state.selectedRider = null;
+  renderTrack(ctx, state);
 
-  seq.sort((a, b) => a.time - b.time);
-  seq.forEach((step, idx) => {
-    const li = document.createElement("li");
-    if (step.fired) li.classList.add("fired");
-    const labelMap = {
-      "drop-black": `⬇ Drop ${step.count} rider${step.count > 1 ? "s" : ""} to Black`,
-      "peel-blue": `⬆ Peel ${step.count} rider${step.count > 1 ? "s" : ""} to Blue`,
-      "whistle": `📣 Blow Whistle`
-    };
-    li.innerHTML = `<span><strong>${step.time.toFixed(1)}s</strong> — ${labelMap[step.action] || step.action}</span>`;
-    const delBtn = document.createElement("button");
-    delBtn.textContent = "✕";
-    delBtn.title = "Remove step";
-    delBtn.addEventListener("click", () => {
-      state.drill.sequence.splice(idx, 1);
-      syncStudioInputs();
-    });
-    li.appendChild(delBtn);
-    listEl.appendChild(li);
-  });
-}
-
-function syncStudioInputs() {
-  const s = state.drill.speeds;
-  document.getElementById("input-pack-speed").value = s.pack;
-  document.getElementById("val-pack-speed").textContent = s.pack;
-  document.getElementById("input-build-speed").value = s.build;
-  document.getElementById("val-build-speed").textContent = s.build;
-  document.getElementById("input-sprint-speed").value = s.sprint;
-  document.getElementById("val-sprint-speed").textContent = s.sprint;
-  document.getElementById("input-station-speed").value = s.station;
-  document.getElementById("val-station-speed").textContent = s.station;
-  document.getElementById("chk-auto-bank").checked = state.drill.autoBank;
-  renderSequenceList();
-  document.getElementById("json-editor").value = JSON.stringify(state.drill, null, 2);
-}
-
-["pack", "build", "sprint", "station"].forEach((key) => {
-  const input = document.getElementById(`input-${key}-speed`);
-  const label = document.getElementById(`val-${key}-speed`);
-  input.addEventListener("input", () => {
-    const val = Number(input.value);
-    label.textContent = val;
-    state.drill.speeds[key] = val;
-    document.getElementById("json-editor").value = JSON.stringify(state.drill, null, 2);
-  });
-});
-
-document.getElementById("chk-auto-bank").addEventListener("change", (e) => {
-  state.drill.autoBank = e.target.checked;
-});
-
-document.getElementById("btn-add-step").addEventListener("click", () => {
-  const time = Math.max(0, Number(document.getElementById("seq-time").value) || 0);
-  const action = document.getElementById("seq-action").value;
-  const count = Number(document.getElementById("seq-count").value) || 1;
-  state.drill.sequence.push({ time, action, count, fired: false });
-  syncStudioInputs();
-});
-
-document.getElementById("btn-clear-seq").addEventListener("click", () => {
-  state.drill.sequence = [];
-  syncStudioInputs();
-});
-
-document.getElementById("btn-add-rider").addEventListener("click", () => {
-  state.drill.riders.push({
-    id: `custom-${Date.now()}`,
-    role: "train",
-    s: 0.25,
-    laneOffset: LANES.BLACK,
-    speedKmh: state.drill.speeds.pack,
-    jersey: "#ec4899",
-    helmet: "#f8fafc"
-  });
-  syncStudioInputs();
-});
-
-document.getElementById("btn-add-derny").addEventListener("click", () => {
-  state.drill.riders.push({
-    id: `derny-${Date.now()}`,
-    type: "derny",
-    s: 0.28,
-    laneOffset: LANES.RED,
-    speedKmh: state.drill.speeds.pack
-  });
-  syncStudioInputs();
-});
-
-document.getElementById("btn-apply-json").addEventListener("click", () => {
-  const status = document.getElementById("json-status");
-  try {
-    const parsed = JSON.parse(document.getElementById("json-editor").value);
-    state.drill = parsed;
-    renderSequenceList();
-    status.textContent = "✓ Drill & sequence applied to Track Display Board.";
-    status.style.color = "#10b981";
-  } catch (err) {
-    status.textContent = `✗ Invalid JSON: ${err.message}`;
-    status.style.color = "#ef4444";
-  }
-});
-
-document.getElementById("btn-download-json").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(state.drill, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${state.drill.id || "velodrome-drill"}.json`;
+  a.href = canvas.toDataURL("image/png");
+  a.download = `velodrome-snapshot-${Date.now()}.png`;
   a.click();
+
+  state.selectedRider = prevSelected;
 });
 
-document.getElementById("file-import-json").addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    document.getElementById("json-editor").value = reader.result;
-    document.getElementById("btn-apply-json").click();
-  };
-  reader.readAsText(file);
+// 2. Capture Storyboard Frame for GIF
+const frameCountEl = document.getElementById("frame-count");
+document.getElementById("btn-capture-frame").addEventListener("click", () => {
+  const prevSelected = state.selectedRider;
+  state.selectedRider = null;
+  renderTrack(ctx, state);
+
+  const offscreen = document.createElement("canvas");
+  offscreen.width = 700;
+  offscreen.height = 400;
+  offscreen.getContext("2d").drawImage(canvas, 0, 0, 700, 400);
+  state.capturedFrames.push(offscreen);
+  frameCountEl.textContent = state.capturedFrames.length;
+
+  state.selectedRider = prevSelected;
 });
 
-// GIF Export (Captures 5 seconds of your programmed sequence & live track motion)
+document.getElementById("btn-clear-frames").addEventListener("click", () => {
+  state.capturedFrames = [];
+  frameCountEl.textContent = "0";
+});
+
+// 3. Export GIF (Uses captured storyboard frames if any exist, or records 4s of live motion)
 document.getElementById("btn-export-gif").addEventListener("click", async () => {
   const btn = document.getElementById("btn-export-gif");
   if (typeof GIF === "undefined") {
-    alert("GIF encoder library is still loading. Try again in a moment.");
+    alert("GIF library is still loading—please try again in a second.");
     return;
   }
 
-  btn.textContent = "⏳ Recording...";
+  btn.textContent = "⏳ Building GIF...";
   btn.disabled = true;
 
   const workerRes = await fetch("https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js");
@@ -323,34 +284,44 @@ document.getElementById("btn-export-gif").addEventListener("click", async () => 
     workerScript: workerUrl
   });
 
-  const offscreen = document.createElement("canvas");
-  offscreen.width = 700;
-  offscreen.height = 400;
-  const offCtx = offscreen.getContext("2d");
+  const prevSelected = state.selectedRider;
+  state.selectedRider = null;
 
-  const wasPlaying = state.playing;
-  state.playing = false;
+  if (state.capturedFrames.length > 0) {
+    for (const frameCanvas of state.capturedFrames) {
+      gif.addFrame(frameCanvas, { copy: true, delay: 450 });
+    }
+  } else {
+    const wasPlaying = state.playing;
+    state.playing = false;
+    const offscreen = document.createElement("canvas");
+    offscreen.width = 700;
+    offscreen.height = 400;
+    const offCtx = offscreen.getContext("2d");
 
-  for (let i = 0; i < 50; i++) {
-    stepSimulation(state.drill, 0.1, null);
-    renderTrack(ctx, state);
-    offCtx.drawImage(canvas, 0, 0, 700, 400);
-    gif.addFrame(offCtx, { copy: true, delay: 80 });
+    for (let i = 0; i < 40; i++) {
+      stepSimulation(state.drill, 0.1, null);
+      renderTrack(ctx, state);
+      offCtx.drawImage(canvas, 0, 0, 700, 400);
+      gif.addFrame(offCtx, { copy: true, delay: 80 });
+    }
+    state.playing = wasPlaying;
   }
 
   gif.on("finished", (blob) => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${state.drill.id || "velodrome-session"}.gif`;
+    a.download = `${state.drill.id || "velodrome-drill"}.gif`;
     a.click();
-    btn.textContent = "🎬 GIF";
+    btn.textContent = "🎬 Export GIF";
     btn.disabled = false;
-    state.playing = wasPlaying;
+    state.selectedRider = prevSelected;
   });
 
   gif.render();
 });
 
+// Animation Loop
 let lastTime = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
@@ -361,14 +332,8 @@ function loop(now) {
   }
 
   renderTrack(ctx, state);
-
-  const hud = getHudTelemetry(state.drill);
-  document.getElementById("hud-drill-name").textContent = state.drill.name;
-  document.getElementById("hud-phase").textContent = hud.phase;
-  document.getElementById("hud-gap").textContent = hud.gap;
-
   requestAnimationFrame(loop);
 }
 
-syncStudioInputs();
+syncZoneInputs();
 requestAnimationFrame(loop);
