@@ -1,6 +1,8 @@
 import { LANES } from "./track.js";
 
 const TRACK_METERS = 250;
+// Clean 1-bike-length spacing (~5.2 meters = 0.021 of a 250m lap) so riders never overlap
+const MIN_BIKE_GAP_S = 0.021;
 
 export function createDrillState(preset) {
   return {
@@ -9,6 +11,12 @@ export function createDrillState(preset) {
     ruleMode: preset.ruleMode || "banking-pace",
     speeds: { ...preset.speeds },
     autoBank: true,
+    elapsedTime: 0,
+    lastEventText: "Ready",
+    sequence: JSON.parse(JSON.stringify(preset.sequence || [])).map((step) => ({
+      ...step,
+      fired: false
+    })),
     riders: JSON.parse(JSON.stringify(preset.riders)),
     whistleState: {
       activePair: 0,
@@ -18,8 +26,58 @@ export function createDrillState(preset) {
   };
 }
 
+/**
+ * Commands `count` riders from above the blue line to drop down and join the black paceline cleanly.
+ */
+export function commandDropToBlack(drill, count = 1) {
+  const highRiders = drill.riders.filter(
+    (r) => r.type !== "derny" && (r.targetLane ?? r.laneOffset) > LANES.BLUE * 0.65
+  );
+  if (highRiders.length === 0) return;
+
+  // Pick the `count` riders closest ahead of the main black-line train (or frontmost high riders)
+  const trainRiders = drill.riders.filter(
+    (r) => r.type !== "derny" && (r.targetLane ?? r.laneOffset) <= LANES.BLUE * 0.65
+  );
+
+  if (trainRiders.length > 0) {
+    const leadS = trainRiders[0].s;
+    highRiders.sort((a, b) => ((a.s - leadS + 1) % 1) - ((b.s - leadS + 1) % 1));
+  }
+
+  const chosen = highRiders.slice(0, count);
+  for (const r of chosen) {
+    r.targetLane = LANES.BLACK;
+    r.role = "train";
+  }
+  drill.lastEventText = `⬇ Dropped ${chosen.length} rider${chosen.length > 1 ? "s" : ""} to Black`;
+}
+
+/**
+ * Commands `count` front riders on the black paceline to peel up above the blue stayer's line.
+ */
+export function commandPeelToBlue(drill, count = 1) {
+  const lowRiders = drill.riders.filter(
+    (r) => r.type !== "derny" && (r.targetLane ?? r.laneOffset) <= LANES.BLUE * 0.65
+  );
+  if (lowRiders.length === 0) return;
+
+  // Find the front-most riders in the black-line paceline (taking wrap-around 0..1 into account)
+  const ordered = sortPacelineOrder(lowRiders);
+  const chosen = ordered.slice(0, count);
+
+  chosen.forEach((r, idx) => {
+    r.targetLane = LANES.BLUE + 24 + (idx % 2) * 14;
+    r.role = "station";
+  });
+  drill.lastEventText = `⬆ Peeled ${chosen.length} rider${chosen.length > 1 ? "s" : ""} to Blue`;
+}
+
 export function triggerWhistle(drill) {
-  if (drill.ruleMode !== "six-pairs-whistle") return;
+  if (drill.ruleMode !== "six-pairs-whistle") {
+    drill.lastEventText = "📣 Whistle Blown";
+    return;
+  }
 
   const ws = drill.whistleState;
   if (ws.phase === "steady") {
@@ -32,12 +90,28 @@ export function triggerWhistle(drill) {
 }
 
 export function stepSimulation(drill, dt, draggingRider = null) {
+  drill.elapsedTime += dt;
+
+  // Execute any pre-programmed sequence moves whose trigger time has arrived
+  if (Array.isArray(drill.sequence)) {
+    for (const step of drill.sequence) {
+      if (!step.fired && drill.elapsedTime >= step.time) {
+        step.fired = true;
+        if (step.action === "drop-black") {
+          commandDropToBlack(drill, step.count || 1);
+        } else if (step.action === "peel-blue") {
+          commandPeelToBlue(drill, step.count || 1);
+        } else if (step.action === "whistle") {
+          triggerWhistle(drill);
+        }
+      }
+    }
+  }
+
   if (drill.ruleMode === "six-pairs-whistle") {
     stepSixPairsWhistle(drill, dt, draggingRider);
-  } else if (drill.ruleMode === "station-catch-peel") {
-    stepStationCatchPeel(drill, dt, draggingRider);
   } else {
-    stepBankingPace(drill, dt, draggingRider);
+    stepBankingPaceWithCleanSpacing(drill, dt, draggingRider);
   }
 }
 
@@ -48,44 +122,78 @@ function advanceRider(rider, speedKmh, dt) {
   rider.s = (((rider.s + ds) % 1) + 1) % 1;
 }
 
-function stepBankingPace(drill, dt, draggingRider) {
-  for (const r of drill.riders) {
-    if (r === draggingRider) continue;
-
-    if (drill.autoBank) {
-      if (r.laneOffset > LANES.BLUE + 8) {
-        r.speedKmh = drill.speeds.station;
-      } else {
-        r.speedKmh = drill.speeds.pack;
-      }
+/**
+ * Orders riders from front-to-back along the counter-clockwise track (handling 0/1 wrap-around).
+ */
+function sortPacelineOrder(riders) {
+  if (riders.length <= 1) return [...riders];
+  const sorted = [...riders].sort((a, b) => b.s - a.s);
+  // Find largest gap around the oval; the rider immediately after the largest gap is the true leader
+  let maxGap = -1;
+  let leaderIdx = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const prev = sorted[(i - 1 + sorted.length) % sorted.length];
+    const curr = sorted[i];
+    const gap = (prev.s - curr.s + 1) % 1;
+    if (gap > maxGap) {
+      maxGap = gap;
+      leaderIdx = i;
     }
-    advanceRider(r, r.speedKmh, dt);
   }
+  return [...sorted.slice(leaderIdx), ...sorted.slice(0, leaderIdx)];
 }
 
-function stepStationCatchPeel(drill, dt, draggingRider) {
-  const trainRiders = drill.riders.filter((r) => r.role === "train");
-  const stationRiders = drill.riders.filter((r) => r.role === "station");
+/**
+ * Smoothly moves riders toward their target lanes and enforces clean single-file wheel spacing
+ * so riders dropping onto the black line slot behind or in front cleanly without overlapping.
+ */
+function stepBankingPaceWithCleanSpacing(drill, dt, draggingRider) {
+  // 1. Smoothly transition lateral lane height & advance along track
+  for (const r of drill.riders) {
+    if (r === draggingRider) {
+      r.targetLane = r.laneOffset;
+      continue;
+    }
 
-  for (const r of trainRiders) {
-    if (r === draggingRider) continue;
-    r.laneOffset += (LANES.BLACK - r.laneOffset) * Math.min(1, dt * 4);
-    r.speedKmh = drill.speeds.pack;
+    if (typeof r.targetLane === "number") {
+      r.laneOffset += (r.targetLane - r.laneOffset) * Math.min(1, dt * 3.8);
+      if (Math.abs(r.targetLane - r.laneOffset) < 0.4) {
+        r.laneOffset = r.targetLane;
+      }
+    }
+
+    if (drill.autoBank) {
+      // Blend speed smoothly based on height between black line and blue stayer's line
+      const blend = Math.max(0, Math.min(1, r.laneOffset / (LANES.BLUE + 14)));
+      r.speedKmh = drill.speeds.pack * (1 - blend) + drill.speeds.station * blend;
+    }
+
     advanceRider(r, r.speedKmh, dt);
   }
 
-  const leadTrain = trainRiders[0];
-  for (const st of stationRiders) {
-    if (st === draggingRider) continue;
-    st.speedKmh = drill.speeds.station;
-    advanceRider(st, st.speedKmh, dt);
+  // 2. Enforce clean wheel-to-wheel spacing on the lower paceline (below blue line)
+  const lowLaneRiders = drill.riders.filter(
+    (r) => r !== draggingRider && r.laneOffset <= LANES.BLUE * 0.65
+  );
+  enforceLineSpacing(lowLaneRiders);
 
-    if (leadTrain) {
-      const dist = (st.s - leadTrain.s + 1) % 1;
-      if (dist > 0.005 && dist < 0.025 && st.laneOffset > LANES.BLUE) {
-        st.role = "train";
-        trainRiders.unshift(st);
-      }
+  // 3. Enforce clean spacing among station riders up above the blue line
+  const highLaneRiders = drill.riders.filter(
+    (r) => r !== draggingRider && r.laneOffset > LANES.BLUE * 0.65
+  );
+  enforceLineSpacing(highLaneRiders);
+}
+
+function enforceLineSpacing(group) {
+  if (group.length <= 1) return;
+  const ordered = sortPacelineOrder(group);
+  for (let i = 1; i < ordered.length; i++) {
+    const ahead = ordered[i - 1];
+    const behind = ordered[i];
+    const gap = (ahead.s - behind.s + 1) % 1;
+    // If rider behind is closer than 1 bike length (or slightly ahead due to lane drop), slot them cleanly behind
+    if (gap < MIN_BIKE_GAP_S || gap > 0.92) {
+      behind.s = (ahead.s - MIN_BIKE_GAP_S + 1) % 1;
     }
   }
 }
@@ -118,7 +226,7 @@ function stepSixPairsWhistle(drill, dt, draggingRider) {
   } else if (ws.phase === "rejoin") {
     targetLaneIn = LANES.BLUE + 28;
     targetLaneOut = LANES.BLUE + 44;
-    targetSpeed = Math.max(18, drill.speeds.pack - 14);
+    targetSpeed = Math.max(25, drill.speeds.pack - 12);
   }
 
   for (const r of activeRiders) {
@@ -180,7 +288,7 @@ export function getHudTelemetry(drill) {
   }
 
   return {
-    phase: "Live Banking Physics",
-    gap: `${drill.riders.length} Riders`
+    phase: drill.lastEventText || "Live Banking Physics",
+    gap: `${drill.elapsedTime.toFixed(1)}s`
   };
 }
